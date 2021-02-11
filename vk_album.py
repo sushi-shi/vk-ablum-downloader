@@ -6,10 +6,10 @@ import json
 import random
 import requests
 import argparse
+
 from shutil import move, rmtree
 from selenium import webdriver
 from collections import OrderedDict
-from multiprocessing import Pool
 from bs4 import BeautifulSoup as BS
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -68,26 +68,20 @@ def _requests_retry_session(retries=3, backoff_factor=0.3, status_forcelist=(500
 
 class album_process:
     def __init__(self, album_url, PhantomJS_path):
-        self.driver = webdriver.PhantomJS(PhantomJS_path)
+        opts = webdriver.FirefoxOptions()
+        opts.set_headless()
+        self.driver = webdriver.Firefox(options=opts)
+
         self.album_url = album_url
 
     # Bad repeat solution
     def console_status(self):
-        try:
-            load_more_status = self.driver.find_element_by_id("ui_photos_load_more").get_attribute("style")
-        except Exception as e:
-            print("\t{} occured. Retry later.".format(type(e).__name__))
-            time.sleep(2)
-            load_more_status = self.console_status()
+        load_more_status = self.driver.find_element_by_id("ui_photos_load_more").get_attribute("style")
         return load_more_status
 
     def console_click(self):
-        try:
-            self.driver.find_element_by_id("ui_photos_load_more").click()
-        except Exception as e:
-            print("{} occured. Now quit.".format(type(e).__name__))
-            self.driver.quit()
-            sys.exit("==Please restart this script.==")
+        element = self.driver.find_element_by_id("ui_photos_load_more")
+        self.driver.execute_script("arguments[0].click();", element)
 
     def get_full_page(self):
         self.driver.get(self.album_url)
@@ -178,18 +172,6 @@ class vk_photo_download:
             print("== {} exists and skipped. ==".format(self.photo_id[1:]))
         time.sleep(random.uniform(0, 1.3))
 
-    def reset_thumb(self):
-        """
-        On Windows OS, Some thumnails will corrupt but full image intact.
-        I'm not sure why it happened.
-        This function helps solve that problem.
-        """
-        tmp_path = "{}/tmp/tmp".format(os.path.dirname(self.dest).replace("//", "/"))
-        move(self.dest, tmp_path)
-        move(tmp_path, self.dest)
-        rmtree(os.path.dirname(tmp_path))
-
-
 def main():
     args = _get_args()
     dest = args[1]
@@ -206,10 +188,8 @@ def main():
         if not os.path.exists(dest):
             os.makedirs(dest, mode=0o777)
 
-        with Pool() as pool:
-            pool.map(vk_photo.save_photo, photo_ids)
-
-        vk_photo.reset_thumb()
+        for photo_id in photo_ids:
+            vk_photo.save_photo(photo_id)
 
 
 if __name__ == '__main__':
